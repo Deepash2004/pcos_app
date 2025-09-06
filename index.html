@@ -302,6 +302,9 @@
                  <div id="user-session" class="hidden">
                      <a href="#" class="nav-link" onclick="navigateTo('profile')">My Profile</a>
                  </div>
+                 <div id="guest-session">
+                    <a href="#" class="nav-link" onclick="navigateTo('login')">Login</a>
+                 </div>
                  <button class="secondary-btn px-4 py-2 rounded-full font-semibold" onclick="openAskAIModal()">
                     ✨ Ask AI
                 </button>
@@ -405,7 +408,6 @@
         let userLogs = {}; // To store period and mood logs from Firestore
         let tempAssessmentData = null; // Store assessment data before login
         let unsubscribeLogs; // To detach Firestore listener
-        let loginRedirectPending = false; // Flag to handle post-login navigation
 
         // Page Templates
         const pages = {
@@ -660,7 +662,7 @@
         // --- Navigation Logic ---
         window.navigateTo = function(page) {
             // Page protection
-            if (page === 'profile' && (!currentUser || currentUser.isAnonymous)) {
+            if (page === 'profile' && !currentUser) {
                 navigateTo('login');
                 return;
             }
@@ -682,13 +684,16 @@
         // --- UI Update Functions ---
         function updateHeader() {
             const userSession = document.getElementById('user-session');
+            const guestSession = document.getElementById('guest-session');
             const mobileMenu = document.getElementById('mobile-menu');
             const mainNav = document.getElementById('main-nav');
 
             if (currentUser && !currentUser.isAnonymous) {
                 userSession.classList.remove('hidden');
+                guestSession.classList.add('hidden');
             } else {
                 userSession.classList.add('hidden');
+                guestSession.classList.remove('hidden');
             }
             
             // Rebuild mobile menu content
@@ -698,6 +703,10 @@
                  mobileMenu.innerHTML += `
                     <a href="#" class="block py-2 text-center mt-2" onclick="navigateTo('profile')">My Profile</a>
                  `;
+            } else {
+                mobileMenu.innerHTML += `
+                    <a href="#" class="block py-2 text-center mt-2" onclick="navigateTo('login')">Login</a>
+                `;
             }
         }
 
@@ -773,16 +782,12 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = { uid: user.uid, email: user.email, isAnonymous: user.isAnonymous };
-                if (!user.isAnonymous) {
-                    await fetchUserData();
-                    if (tempAssessmentData) {
-                        await saveAssessmentResults(tempAssessmentData);
-                        tempAssessmentData = null;
-                    }
-                    if (loginRedirectPending) {
-                        loginRedirectPending = false; // Reset the flag
-                        navigateTo('profile');
-                    }
+                // For both guest and logged-in users, we want to listen for their data.
+                await setupLogListener(); 
+                
+                if (window.location.hash === '#profile-redirect' && !user.isAnonymous) {
+                    navigateTo('profile');
+                    window.location.hash = ''; 
                 }
             } else {
                 currentUser = null;
@@ -793,8 +798,10 @@
             updateHeader();
         });
         
-        async function fetchUserData() {
-            if (!currentUser || currentUser.isAnonymous) return;
+        async function setupLogListener() {
+            if (!currentUser) return;
+            if (unsubscribeLogs) unsubscribeLogs(); // Clear old listener
+
             const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
             const assessmentSnap = await getDoc(assessmentRef);
             if (assessmentSnap.exists()) {
@@ -836,10 +843,9 @@
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             try {
-                loginRedirectPending = true; // Set flag before initiating login
                 await signInWithEmailAndPassword(auth, email, password);
+                window.location.hash = 'profile-redirect';
             } catch (error) {
-                loginRedirectPending = false; // Reset flag on error
                 showModal(`Login failed: ${error.message}`);
             }
         }
@@ -848,59 +854,57 @@
             const email = document.getElementById('signup-email').value;
             const password = document.getElementById('signup-password').value;
             try {
-                loginRedirectPending = true; // Set flag before initiating signup
                 await createUserWithEmailAndPassword(auth, email, password);
+                window.location.hash = 'profile-redirect';
             } catch (error) {
-                loginRedirectPending = false; // Reset flag on error
                 showModal(`Signup failed: ${error.message}`);
             }
         }
         window.logout = async function() {
             await signOut(auth);
-            await signInAnonymously(auth);
+            // onAuthStateChanged will handle signing in a new anonymous user
             navigateTo('home');
         };
 
         async function saveAssessmentResults(data) {
-            if (!currentUser || currentUser.isAnonymous) {
-                tempAssessmentData = data;
-                showModal("Please log in or sign up to save your results and view your personalized plan.");
-                navigateTo('login');
-                return true; // Indicate that navigation occurred
+            if (!currentUser) {
+                 showModal("There was a problem with your session. Please refresh and try again.");
+                 return;
             }
             try {
                 const docRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
                 await setDoc(docRef, data);
                 userAssessmentData = data; 
-                console.log("Assessment data saved.");
+                console.log("Assessment data saved for user:", currentUser.uid);
             } catch(e) {
                 console.error("Error saving assessment data:", e);
                 showModal("Could not save your assessment data. Please try again.");
             }
-            return false; // Indicate no navigation occurred
         }
 
         // --- Profile Page Logic ---
-        function renderProfilePage() {
-             // Double-check auth state before rendering to prevent showing "Guest"
-             if (!currentUser || currentUser.isAnonymous) {
-                 navigateTo('login'); // Force redirect if somehow this page was reached
+        async function renderProfilePage() {
+             const profileContainer = document.getElementById('profile-container');
+             if (!profileContainer) return;
+
+             if (!currentUser) {
+                 navigateTo('login');
                  return;
              }
+
+             profileContainer.innerHTML = `<div class="loader-container"><div class="loader"></div></div>`;
             
-            // Now that we're sure user is logged in, render the full dashboard
-             const profileContainer = document.getElementById('profile-container');
-             if (!profileContainer) return; // Should not happen
+             const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
+             const assessmentSnap = await getDoc(assessmentRef);
+             userAssessmentData = assessmentSnap.exists() ? assessmentSnap.data() : null;
 
              profileContainer.innerHTML = `
-                <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
+                <div id="profile-welcome" class="md:flex justify-between items-start text-center md:text-left mb-8">
                     <div>
                         <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
                          <p id="welcome-message" class="text-lg text-gray-600 mt-2"></p>
                     </div>
-                    <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
-                        Logout
-                    </button>
+                    <div id="profile-action-container"></div>
                 </div>
                 <div id="summary-cards" class="grid sm:grid-cols-2 gap-6 mb-8">
                     <!-- Summary cards will be injected here -->
@@ -917,9 +921,33 @@
              `;
 
              const welcomeMsg = document.getElementById('welcome-message');
-             if (welcomeMsg) {
-                welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
+             const actionContainer = document.getElementById('profile-action-container');
+
+             if (currentUser.isAnonymous) {
+                 if (welcomeMsg) welcomeMsg.textContent = 'Welcome, Guest User';
+                 if (actionContainer) {
+                     actionContainer.innerHTML = `
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md mt-4 md:mt-0 text-left">
+                            <p class="font-bold">You are using a guest account.</p>
+                            <p class="text-sm">Your data is saved on this device, but to access it anywhere, please create a permanent account.</p>
+                            <p class="text-xs mt-2"><strong>Note:</strong> Creating an account will start a new profile. Your current guest data will not be transferred.</p>
+                            <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4" onclick="navigateTo('login')">
+                                Create Permanent Account
+                            </button>
+                        </div>
+                     `;
+                 }
+             } else {
+                if (welcomeMsg) welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
+                if (actionContainer) {
+                    actionContainer.innerHTML = `
+                        <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
+                            Logout
+                        </button>
+                    `;
+                }
              }
+
              renderSummaryCards();
              renderProfilePlan();
         }
@@ -1274,8 +1302,8 @@
         }
 
         window.saveLog = async function(key, value) {
-            if (!currentUser || currentUser.isAnonymous) {
-                showModal("Please log in to save your logs.");
+            if (!currentUser) {
+                showModal("Your session is not ready. Please wait a moment.");
                 return;
             }
             const dateString = selectedDate.toISOString().split('T')[0];
@@ -1496,7 +1524,7 @@ Please format your response using strict Markdown with the following structure:
 4. Under each meal heading, list the dish name and then use bullet points ('*') for ingredients or components.
 5. Conclude with a "### Important Considerations" section, with bullet points for key advice. Do not use any other formatting.`;
             try {
-                const apiKey = "";
+                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1561,7 +1589,7 @@ Please format your response using strict Markdown with the following structure f
 * 5 minutes of gentle stretching (holding each stretch for 20-30 seconds)
 Do not include any introductory or concluding paragraphs outside of this daily structure.`;
             try {
-                const apiKey = "";
+                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1578,7 +1606,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
             }
         }
 
-        const handleSymptomQuery = async function(inputId, outputId, buttonId) {
+        window.handleSymptomQuery = async function(inputId, outputId, buttonId) {
             const input = document.getElementById(inputId);
             const explanationDiv = document.getElementById(outputId);
             const submitBtn = document.getElementById(buttonId);
@@ -1594,7 +1622,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
             submitBtn.classList.add('opacity-50');
             const prompt = `As a caring health assistant named Sakhi, explain the potential connection between PCOS and "${userQuery}" in simple, empathetic terms (2-3 sentences). Do not give medical advice.`;
             try {
-                const apiKey = "";
+                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -1662,17 +1690,10 @@ Do not include any introductory or concluding paragraphs outside of this daily s
                 description = "Based on your inputs, there is a high likelihood they could be related to PCOS. This is not a diagnosis. We strongly recommend sharing these results with a gynecologist.";
                 colorClass = "text-red-600";
             }
-            const navigatedAway = await saveAssessmentResults(rawFeatures);
-            if (navigatedAway) return; // Stop execution if we navigated to login page
+            
+            await saveAssessmentResults(rawFeatures);
 
             const lifestyleHTML = generateLifestyleRecommendations(rawFeatures);
-            const authPromptHTML = (!currentUser || currentUser.isAnonymous) ? `
-                 <div class="mt-8">
-                    <h3 class="font-semibold mb-2">Next Steps:</h3>
-                    <p class="text-gray-500 mb-4">Log in or create an account to save your results and get a personalized AI-powered diet plan.</p>
-                    <button class="primary-btn px-8 py-3 rounded-full font-semibold shadow-lg" onclick="navigateTo('login')">Login to Save & Continue</button>
-                </div>
-            ` : `<div class="mt-8"><button class="primary-btn px-8 py-3 rounded-full font-semibold shadow-lg" onclick="navigateTo('profile')">Go to My Profile</button></div>`;
 
             const resultsHTML = `
                 <h2 class="text-3xl font-bold mb-4">Your AI-Powered Assessment Result</h2>
@@ -1681,7 +1702,10 @@ Do not include any introductory or concluding paragraphs outside of this daily s
                     <p class="text-6xl font-bold ${colorClass}">${riskPercent}%</p>
                     <p class="text-2xl font-semibold ${colorClass} mb-4">(${riskLevel} Risk)</p>
                     <p class="text-gray-600 max-w-md mx-auto">${description}</p>
-                    ${authPromptHTML}
+                    <div class="mt-8">
+                        <p class="text-gray-500 mb-4">Your results have been saved. Visit your personal dashboard to view your lifestyle plan and track your symptoms.</p>
+                        <button class="primary-btn px-8 py-3 rounded-full font-semibold shadow-lg" onclick="navigateTo('profile')">Go to My Dashboard</button>
+                    </div>
                 </div>
                 ${lifestyleHTML}
                 <button class="secondary-btn px-6 py-2 rounded-full font-semibold mt-10" onclick="navigateTo('assessment')">Take Assessment Again</button>
