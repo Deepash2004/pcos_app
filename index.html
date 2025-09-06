@@ -384,13 +384,12 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : { 
-                apiKey: "AIzaSyBTmlu9qwlNupFEdXWilkz4L2RlcK6vMQE",
-                authDomain: "pcos-app-e0cd6.firebaseapp.com",
-                projectId: "pcos-app-e0cd6",
-                storageBucket: "pcos-app-e0cd6.firebasestorage.app",
-                messagingSenderId: "72666915946",
-                appId: "1:72666915946:web:18d01afb57368a04335613",
-                measurementId: "G-FV6YPMZPYY"
+                apiKey: "YOUR_API_KEY", 
+                authDomain: "YOUR_AUTH_DOMAIN", 
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_STORAGE_BUCKET",
+                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                appId: "YOUR_APP_ID"
             };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -1509,7 +1508,7 @@ Please format your response using strict Markdown with the following structure:
 4. Under each meal heading, list the dish name and then use bullet points ('*') for ingredients or components.
 5. Conclude with a "### Important Considerations" section, with bullet points for key advice. Do not use any other formatting.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1574,7 +1573,7 @@ Please format your response using strict Markdown with the following structure f
 * 5 minutes of gentle stretching (holding each stretch for 20-30 seconds)
 Do not include any introductory or concluding paragraphs outside of this daily structure.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1607,7 +1606,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
             submitBtn.classList.add('opacity-50');
             const prompt = `As a caring health assistant named Sakhi, explain the potential connection between PCOS and "${userQuery}" in simple, empathetic terms (2-3 sentences). Do not give medical advice.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, {
                     method: 'POST',
