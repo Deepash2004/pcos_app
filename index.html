@@ -299,7 +299,7 @@
                 <a href="#" class="nav-link" onclick="navigateTo('the-science')">The Science</a>
             </nav>
              <div class="hidden md:flex items-center space-x-4">
-                 <div id="user-session">
+                 <div id="user-session" class="hidden">
                      <a href="#" class="nav-link" onclick="navigateTo('profile')">My Profile</a>
                  </div>
                  <button class="secondary-btn px-4 py-2 rounded-full font-semibold" onclick="openAskAIModal()">
@@ -384,13 +384,12 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : { 
-                apiKey: "AIzaSyBTmlu9qwlNupFEdXWilkz4L2RlcK6vMQE",
-                authDomain: "pcos-app-e0cd6.firebaseapp.com",
-                projectId: "pcos-app-e0cd6",
-                storageBucket: "pcos-app-e0cd6.firebasestorage.app",
-                messagingSenderId: "72666915946",
-                appId: "1:72666915946:web:18d01afb57368a04335613",
-                measurementId: "G-FV6YPMZPYY"
+                apiKey: "YOUR_API_KEY", 
+                authDomain: "YOUR_AUTH_DOMAIN", 
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_STORAGE_BUCKET",
+                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                appId: "YOUR_APP_ID"
             };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -406,6 +405,7 @@
         let userLogs = {}; // To store period and mood logs from Firestore
         let tempAssessmentData = null; // Store assessment data before login
         let unsubscribeLogs; // To detach Firestore listener
+        let loginRedirectPending = false; // Flag to handle post-login navigation
 
         // Page Templates
         const pages = {
@@ -685,15 +685,20 @@
             const mobileMenu = document.getElementById('mobile-menu');
             const mainNav = document.getElementById('main-nav');
 
-            // The desktop "My Profile" link is now always visible via HTML.
+            if (currentUser && !currentUser.isAnonymous) {
+                userSession.classList.remove('hidden');
+            } else {
+                userSession.classList.add('hidden');
+            }
             
             // Rebuild mobile menu content
             mobileMenu.innerHTML = mainNav.innerHTML; // copy main nav links
              mobileMenu.innerHTML += `<button class="secondary-btn w-full mt-4 px-6 py-2 rounded-full font-semibold" onclick="openAskAIModal()">✨ Ask AI</button>`;
-            // Always show the profile link in the mobile menu
-             mobileMenu.innerHTML += `
-                <a href="#" class="block py-2 text-center mt-2" onclick="navigateTo('profile')">My Profile</a>
-             `;
+            if (currentUser && !currentUser.isAnonymous) {
+                 mobileMenu.innerHTML += `
+                    <a href="#" class="block py-2 text-center mt-2" onclick="navigateTo('profile')">My Profile</a>
+                 `;
+            }
         }
 
         function updateActiveNavLink(page) {
@@ -769,19 +774,15 @@
             if (user) {
                 currentUser = { uid: user.uid, email: user.email, isAnonymous: user.isAnonymous };
                 if (!user.isAnonymous) {
-                    await setupLogListener(); 
+                    await fetchUserData();
                     if (tempAssessmentData) {
                         await saveAssessmentResults(tempAssessmentData);
-                        tempAssessmentData = null; 
-                        if (window.location.hash !== '#profile-redirect') {
-                           window.location.hash = 'profile-redirect';
-                           navigateTo('profile');
-                        }
+                        tempAssessmentData = null;
                     }
-                }
-                if (window.location.hash === '#profile-redirect') {
-                    navigateTo('profile');
-                    window.location.hash = ''; 
+                    if (loginRedirectPending) {
+                        loginRedirectPending = false; // Reset the flag
+                        navigateTo('profile');
+                    }
                 }
             } else {
                 currentUser = null;
@@ -792,10 +793,8 @@
             updateHeader();
         });
         
-        async function setupLogListener() {
+        async function fetchUserData() {
             if (!currentUser || currentUser.isAnonymous) return;
-            if (unsubscribeLogs) unsubscribeLogs(); // Clear old listener
-
             const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
             const assessmentSnap = await getDoc(assessmentRef);
             if (assessmentSnap.exists()) {
@@ -837,9 +836,10 @@
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             try {
+                loginRedirectPending = true; // Set flag before initiating login
                 await signInWithEmailAndPassword(auth, email, password);
-                window.location.hash = 'profile-redirect';
             } catch (error) {
+                loginRedirectPending = false; // Reset flag on error
                 showModal(`Login failed: ${error.message}`);
             }
         }
@@ -848,9 +848,10 @@
             const email = document.getElementById('signup-email').value;
             const password = document.getElementById('signup-password').value;
             try {
+                loginRedirectPending = true; // Set flag before initiating signup
                 await createUserWithEmailAndPassword(auth, email, password);
-                window.location.hash = 'profile-redirect';
             } catch (error) {
+                loginRedirectPending = false; // Reset flag on error
                 showModal(`Signup failed: ${error.message}`);
             }
         }
@@ -880,76 +881,47 @@
         }
 
         // --- Profile Page Logic ---
-        async function renderProfilePage() {
-             const profileContainer = document.getElementById('profile-container');
-             if (!profileContainer) return;
-
+        function renderProfilePage() {
              // Double-check auth state before rendering to prevent showing "Guest"
              if (!currentUser || currentUser.isAnonymous) {
                  navigateTo('login'); // Force redirect if somehow this page was reached
                  return;
              }
-
-             // 1. Show loader immediately while data is fetched
-             profileContainer.innerHTML = `<div class="loader-container"><div class="loader"></div></div>`;
             
-             try {
-                 // 2. Fetch the initial assessment data
-                 const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
-                 const assessmentSnap = await getDoc(assessmentRef);
-                 userAssessmentData = assessmentSnap.exists() ? assessmentSnap.data() : null;
+            // Now that we're sure user is logged in, render the full dashboard
+             const profileContainer = document.getElementById('profile-container');
+             if (!profileContainer) return; // Should not happen
 
-                 // 3. Now that data is ready, render the full dashboard, replacing the loader
-                 profileContainer.innerHTML = `
-                    <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
-                        <div>
-                            <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
-                             <p id="welcome-message" class="text-lg text-gray-600 mt-2"></p>
-                        </div>
-                        <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
-                            Logout
-                        </button>
+             profileContainer.innerHTML = `
+                <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
+                    <div>
+                        <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
+                         <p id="welcome-message" class="text-lg text-gray-600 mt-2"></p>
                     </div>
-                    <div id="summary-cards" class="grid sm:grid-cols-2 gap-6 mb-8">
-                        <!-- Summary cards will be injected here -->
-                    </div>
-                    <div id="profile-tabs" class="flex flex-wrap justify-center border-b border-pink-200 mb-8">
-                        <div class="profile-tab active" onclick="switchProfileTab('plan')">My Plan</div>
-                        <div class="profile-tab" onclick="switchProfileTab('workouts')">My Workouts</div>
-                        <div class="profile-tab" onclick="switchProfileTab('tracker')">Symptom Tracker</div>
-                        <div class="profile-tab" onclick="switchProfileTab('reports')">Progress Report</div>
-                    </div>
-                    <div id="profile-content">
-                        <!-- Profile content will be injected here -->
-                    </div>
-                 `;
+                    <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
+                        Logout
+                    </button>
+                </div>
+                <div id="summary-cards" class="grid sm:grid-cols-2 gap-6 mb-8">
+                    <!-- Summary cards will be injected here -->
+                </div>
+                <div id="profile-tabs" class="flex flex-wrap justify-center border-b border-pink-200 mb-8">
+                    <div class="profile-tab active" onclick="switchProfileTab('plan')">My Plan</div>
+                    <div class="profile-tab" onclick="switchProfileTab('workouts')">My Workouts</div>
+                    <div class="profile-tab" onclick="switchProfileTab('tracker')">Symptom Tracker</div>
+                    <div class="profile-tab" onclick="switchProfileTab('reports')">Progress Report</div>
+                </div>
+                <div id="profile-content">
+                    <!-- Profile content will be injected here -->
+                </div>
+             `;
 
-                // 4. Populate the newly created elements with data
-                 const welcomeMsg = document.getElementById('welcome-message');
-                 if (welcomeMsg) {
-                    welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
-                 }
-                 renderSummaryCards();
-                 renderProfilePlan();
-             } catch (error) {
-                 console.error("Failed to render profile page:", error);
-                 // Render a fallback UI if fetching fails
-                 profileContainer.innerHTML = `
-                    <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
-                        <div>
-                            <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
-                             <p id="welcome-message" class="text-lg text-gray-600 mt-2">Welcome, ${currentUser.email || 'User'}</p>
-                        </div>
-                         <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
-                            Logout
-                        </button>
-                    </div>
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
-                      <strong class="font-bold">Error:</strong>
-                      <span class="block sm:inline">Could not load your profile data. Please check your internet connection and try again.</span>
-                    </div>
-                 `;
+             const welcomeMsg = document.getElementById('welcome-message');
+             if (welcomeMsg) {
+                welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
              }
+             renderSummaryCards();
+             renderProfilePlan();
         }
 
         function renderSummaryCards() {
@@ -1606,7 +1578,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
             }
         }
 
-        window.handleSymptomQuery = async function(inputId, outputId, buttonId) {
+        const handleSymptomQuery = async function(inputId, outputId, buttonId) {
             const input = document.getElementById(inputId);
             const explanationDiv = document.getElementById(outputId);
             const submitBtn = document.getElementById(buttonId);
@@ -1743,7 +1715,4 @@ Do not include any introductory or concluding paragraphs outside of this daily s
     </script>
 </body>
 </html>
-
-
-
 
