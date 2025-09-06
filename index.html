@@ -390,7 +390,7 @@
                 storageBucket: "pcos-app-e0cd6.firebasestorage.app",
                 messagingSenderId: "72666915946",
                 appId: "1:72666915946:web:18d01afb57368a04335613",
-  measurementId: "G-FV6YPMZPYY"
+                measurementId: "G-FV6YPMZPYY"
             };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -893,43 +893,63 @@
              // 1. Show loader immediately while data is fetched
              profileContainer.innerHTML = `<div class="loader-container"><div class="loader"></div></div>`;
             
-             // 2. Fetch the initial assessment data
-             const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
-             const assessmentSnap = await getDoc(assessmentRef);
-             userAssessmentData = assessmentSnap.exists() ? assessmentSnap.data() : null;
+             try {
+                 // 2. Fetch the initial assessment data
+                 const assessmentRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/profile`, "assessment");
+                 const assessmentSnap = await getDoc(assessmentRef);
+                 userAssessmentData = assessmentSnap.exists() ? assessmentSnap.data() : null;
 
-             // 3. Now that data is ready, render the full dashboard, replacing the loader
-             profileContainer.innerHTML = `
-                <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
-                    <div>
-                        <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
-                         <p id="welcome-message" class="text-lg text-gray-600 mt-2"></p>
+                 // 3. Now that data is ready, render the full dashboard, replacing the loader
+                 profileContainer.innerHTML = `
+                    <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
+                        <div>
+                            <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
+                             <p id="welcome-message" class="text-lg text-gray-600 mt-2"></p>
+                        </div>
+                        <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
+                            Logout
+                        </button>
                     </div>
-                    <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
-                        Logout
-                    </button>
-                </div>
-                <div id="summary-cards" class="grid sm:grid-cols-2 gap-6 mb-8">
-                    <!-- Summary cards will be injected here -->
-                </div>
-                <div id="profile-tabs" class="flex flex-wrap justify-center border-b border-pink-200 mb-8">
-                    <div class="profile-tab active" onclick="switchProfileTab('plan')">My Plan</div>
-                    <div class="profile-tab" onclick="switchProfileTab('workouts')">My Workouts</div>
-                    <div class="profile-tab" onclick="switchProfileTab('tracker')">Symptom Tracker</div>
-                    <div class="profile-tab" onclick="switchProfileTab('reports')">Progress Report</div>
-                </div>
-                <div id="profile-content">
-                    <!-- Profile content will be injected here -->
-                </div>
-             `;
+                    <div id="summary-cards" class="grid sm:grid-cols-2 gap-6 mb-8">
+                        <!-- Summary cards will be injected here -->
+                    </div>
+                    <div id="profile-tabs" class="flex flex-wrap justify-center border-b border-pink-200 mb-8">
+                        <div class="profile-tab active" onclick="switchProfileTab('plan')">My Plan</div>
+                        <div class="profile-tab" onclick="switchProfileTab('workouts')">My Workouts</div>
+                        <div class="profile-tab" onclick="switchProfileTab('tracker')">Symptom Tracker</div>
+                        <div class="profile-tab" onclick="switchProfileTab('reports')">Progress Report</div>
+                    </div>
+                    <div id="profile-content">
+                        <!-- Profile content will be injected here -->
+                    </div>
+                 `;
 
-            // 4. Populate the newly created elements with data
-             const welcomeMsg = document.getElementById('welcome-message');
-             if (welcomeMsg) {
-                welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
+                // 4. Populate the newly created elements with data
+                 const welcomeMsg = document.getElementById('welcome-message');
+                 if (welcomeMsg) {
+                    welcomeMsg.textContent = `Welcome, ${currentUser.email || 'User'}`;
+                 }
+                 renderSummaryCards();
+                 renderProfilePlan();
+             } catch (error) {
+                 console.error("Failed to render profile page:", error);
+                 // Render a fallback UI if fetching fails
+                 profileContainer.innerHTML = `
+                    <div id="profile-welcome" class="md:flex justify-between items-center text-center md:text-left mb-8">
+                        <div>
+                            <h1 class="text-4xl md:text-5xl font-bold">My Dashboard</h1>
+                             <p id="welcome-message" class="text-lg text-gray-600 mt-2">Welcome, ${currentUser.email || 'User'}</p>
+                        </div>
+                         <button class="primary-btn px-6 py-2 rounded-full font-semibold shadow-md mt-4 md:mt-0" onclick="logout()">
+                            Logout
+                        </button>
+                    </div>
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+                      <strong class="font-bold">Error:</strong>
+                      <span class="block sm:inline">Could not load your profile data. Please check your internet connection and try again.</span>
+                    </div>
+                 `;
              }
-             renderSummaryCards();
-             renderProfilePlan();
         }
 
         function renderSummaryCards() {
@@ -1504,7 +1524,7 @@ Please format your response using strict Markdown with the following structure:
 4. Under each meal heading, list the dish name and then use bullet points ('*') for ingredients or components.
 5. Conclude with a "### Important Considerations" section, with bullet points for key advice. Do not use any other formatting.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1569,7 +1589,7 @@ Please format your response using strict Markdown with the following structure f
 * 5 minutes of gentle stretching (holding each stretch for 20-30 seconds)
 Do not include any introductory or concluding paragraphs outside of this daily structure.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 if (!response.ok) throw new Error(`API call failed`);
@@ -1602,7 +1622,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
             submitBtn.classList.add('opacity-50');
             const prompt = `As a caring health assistant named Sakhi, explain the potential connection between PCOS and "${userQuery}" in simple, empathetic terms (2-3 sentences). Do not give medical advice.`;
             try {
-                const apiKey = "AIzaSyAhDHHYTm_cD6fvbQbCGbwXEKAHyouo5ZM";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -1723,6 +1743,7 @@ Do not include any introductory or concluding paragraphs outside of this daily s
     </script>
 </body>
 </html>
+
 
 
 
