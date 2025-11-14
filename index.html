@@ -387,20 +387,32 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Initialization ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
+        //
+        // This logic checks if a special config is provided by the environment
+        // (like the Canvas preview). If not, it falls back to your
+        // hard-coded production config for Vercel.
+        // This fixes the 'custom-token-mismatch' error in the preview.
+        //
+        const firebaseConfig = typeof __firebase_config !== 'undefined'
+            ? JSON.parse(__firebase_config)
             : { 
-                apiKey: "YOUR_API_KEY", 
-                authDomain: "YOUR_AUTH_DOMAIN", 
-                projectId: "YOUR_PROJECT_ID",
-                storageBucket: "YOUR_STORAGE_BUCKET",
-                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-                appId: "YOUR_APP_ID"
+                apiKey: "AIzaSyBTmlu9qwlNupFEdXWilkz4L2RlcK6vMQE", 
+                authDomain: "pcos-app-e0cd6.firebaseapp.com", 
+                projectId: "pcos-app-e0cd6",
+                storageBucket: "pcos-app-e0cd6.appspot.com",
+                messagingSenderId: "72666915946",
+                appId: "1:72666915946:web:18d01afb57368a04335613"
             };
+        
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        //
+        // This uses the environment's app ID (for preview) or falls
+        // back to your production ID.
+        //
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'my-pcos-app-production';
 
 
         const mainContent = document.getElementById('main-content');
@@ -1314,18 +1326,21 @@ Do not include any introductory or concluding paragraphs outside of this daily s
         // --- Authentication Logic ---
         (async () => {
             try {
+                // This logic is now correct.
+                // In Canvas: __initial_auth_token is defined, and firebaseConfig matches.
+                // In Vercel: __initial_auth_token is undefined, so it will signInAnonymously.
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Initial sign-in failed:", error);
+                console.error("Initial sign-in failed:", error); // This log might still appear if anon-signin is off
                 if (!auth.currentUser) {
                     try {
                         await signInAnonymously(auth);
                     } catch (anonError) {
-                        console.error("Anonymous sign-in also failed:", anonError);
+                        console.error("Anonymous sign-in also failed:", anonError); // e.g., if not enabled in Firebase
                     }
                 }
             }
